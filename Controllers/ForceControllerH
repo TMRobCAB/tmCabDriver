@@ -1,0 +1,70 @@
+#ifndef FORCE_CTL_H
+
+#define FORCE_CTL_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "Sensors/ForceSensor.h"
+#include "Modules/PIDCtl.h"
+#include "utils/ModuleIOPorts.h"
+#include "utils/CtlHandler.h"
+
+//*****************************************************************************
+//
+// Global variables of ForceController.c
+//
+//*****************************************************************************
+
+typedef struct ClassForceCtl ClassForceCtl;
+
+struct ClassForceCtl{
+
+	uint32_t _forceFS;
+
+	ClassPID _forcePID;
+
+	ClassIOPorts _forceIOPorts;
+
+	ClassCtlHandler _forceHandler;
+};
+
+
+
+//*****************************************************************************
+//
+// Functions defined in ForceController.c
+//
+//*****************************************************************************
+
+
+//*****************************************************************************
+//
+// Functions defined in ForceController.c that are made available to other files.
+//
+//*****************************************************************************
+void ForceCtl_Construct(ClassForceCtl * ForceCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+void ForceCtl_Config(ClassForceCtl * ForceCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+float ForceCtl_GetForceRef(ClassForceCtl * ForceCtl);
+float ForceCtl_GetCtlSignal(ClassForceCtl * ForceCtl);
+float ForceCtl_GetCtlSignalP(ClassForceCtl * ForceCtl);
+float ForceCtl_GetCtlSignalI(ClassForceCtl * ForceCtl);
+float ForceCtl_GetForceError(ClassForceCtl * ForceCtl);
+
+void ForceCtl_ComputeForceCtl(void * ForceCtlV);
+
+void ForceCtl_SetFS(ClassForceCtl * ForceCtl, uint32_t ctlFS);
+void ForceCtl_SetKP(ClassForceCtl * ForceCtl, float ctlKP);
+void ForceCtl_SetKI(ClassForceCtl * ForceCtl, float ctlKI);
+void ForceCtl_SetSat(ClassForceCtl * ForceCtl, float ctlSat);
+void ForceCtl_SetISat(ClassForceCtl * ForceCtl, float ctlISat);
+
+uint32_t ForceCtl_GetFS(void * ForceCtlV);
+float ForceCtl_GetKP(ClassForceCtl * ForceCtl);
+float ForceCtl_GetKI(ClassForceCtl * ForceCtl);
+float ForceCtl_GetSat(ClassForceCtl * ForceCtl);
+float ForceCtl_GetISat(ClassForceCtl * ForceCtl);
+
+#endif

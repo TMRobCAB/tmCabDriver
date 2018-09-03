@@ -1,0 +1,389 @@
+//*****************************************************************************
+//
+// rgb_commands.c - Command line functionality implementation
+//
+// Copyright (c) 2012-2014 Texas Instruments Incorporated.  All rights reserved.
+// Software License Agreement
+// 
+// Texas Instruments (TI) is supplying this software for use solely and
+// exclusively on TI's microcontroller products. The software is owned by
+// TI and/or its suppliers, and is protected under applicable copyright
+// laws. You may not combine this software with "viral" open-source
+// software in order to form a larger program.
+// 
+// THIS SOFTWARE IS PROVIDED "AS IS" AND WITH ALL FAULTS.
+// NO WARRANTIES, WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT
+// NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. TI SHALL NOT, UNDER ANY
+// CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
+// DAMAGES, FOR ANY REASON WHATSOEVER.
+// 
+// This is part of revision 2.1.0.12573 of the EK-TM4C123GXL Firmware Package.
+//ClassSysFSM
+//*****************************************************************************
+
+#include "ComCmds.h"
+
+ClassSysFSM * _sysFSM = NULL;
+
+static unsigned char g_cInput[APP_INPUT_BUF_SIZE];
+
+pfnCmdLine g_psCmdTable[CMDM_NUM];
+
+//////////////////////////////////////////////
+// MASTER Cmd Functions
+//////////////////////////////////////////////
+
+void ComCmd_Init(ClassSysFSM * sysFSM) {
+
+	_sysFSM = sysFSM;
+
+	// Commnds function list
+	//////////////////////////////////////////////////
+
+	g_psCmdTable[CMDM1_START_CTL] = ComCmd_StartCtl;
+	g_psCmdTable[CMDM2_STOP_CTL] = ComCmd_stopCtl;
+	g_psCmdTable[CMDM3_UPDATE] = ComCmd_UpdateSys;
+	g_psCmdTable[CMDM4_SET_REF] = ComCmd_SetRef;
+	g_psCmdTable[CMDM5_SEL_SCHEME] = ComCmd_SelScheme;
+
+	g_psCmdTable[CMDM6_SAFE_POS_MAX] = ComCmd_SetSafePos;
+	g_psCmdTable[CMDM7_SAFE_POS_MIN] = ComCmd_SetSafePos;
+
+	g_psCmdTable[CMDM8_SAFE_VEL_MAX] = ComCmd_SetSafeVel;
+	g_psCmdTable[CMDM9_SAFE_VEL_MIN] = ComCmd_SetSafeVel;
+
+	g_psCmdTable[CMDM10_SAFE_PWM_MAX] = ComCmd_SetSafePWM;
+	g_psCmdTable[CMDM11_SAFE_PWM_MIN] = ComCmd_SetSafePWM;
+
+	g_psCmdTable[CMDM12_SAFE_CURR_MAX] = ComCmd_SetSafeCurr;
+	g_psCmdTable[CMDM13_SAFE_CURR_MIN] = ComCmd_SetSafeCurr;
+
+//////////////////////////////////////////////////
+}
+
+int FindSafePar(char safeID) {
+
+	int i;
+
+	for (i = 0; i < _sysFSM->_selectedScheme->_safeMon->_varNum; ++i) {
+
+		if (_sysFSM->_selectedScheme->_safeMon->_varName[i] == safeID)
+			return i;
+	}
+
+	return -1;
+}
+
+int ComCmd_SetSafePos(int8_t cmd, float arg) {
+
+	int i;
+
+	if (_sysFSM->_fRunning)
+		return COM_CMD_ERR_SAFE_CONFIG;
+
+	i = FindSafePar(SAFE_ID_POS);
+
+	if (i < 0)
+		return COM_CMD_ERR_SAFE_NOT_FOUND;
+
+	if (cmd == CMDM6_SAFE_POS_MAX)
+		_sysFSM->_selectedScheme->_safeMon->_highBound[i] = arg;
+
+	else if (cmd == CMDM7_SAFE_POS_MIN)
+		_sysFSM->_selectedScheme->_safeMon->_lowBound[i] = arg;
+
+	return (COM_CMD_SAFE_UDATED);
+}
+
+int ComCmd_SetSafeVel(int8_t cmd, float arg) {
+
+	int i;
+
+	if (_sysFSM->_fRunning)
+		return COM_CMD_ERR_SAFE_CONFIG;
+
+	i = FindSafePar(SAFE_ID_VEL);
+
+	if (i < 0)
+		return COM_CMD_ERR_SAFE_NOT_FOUND;
+
+	if (cmd == CMDM8_SAFE_VEL_MAX)
+		_sysFSM->_selectedScheme->_safeMon->_highBound[i] = arg;
+
+	else if (cmd == CMDM9_SAFE_VEL_MIN)
+		_sysFSM->_selectedScheme->_safeMon->_lowBound[i] = arg;
+
+	return (COM_CMD_SAFE_UDATED);
+}
+
+int ComCmd_SetSafePWM(int8_t cmd, float arg) {
+
+	int i;
+
+	if (_sysFSM->_fRunning)
+		return COM_CMD_ERR_SAFE_CONFIG;
+
+	i = FindSafePar(SAFE_ID_PWM);
+
+	if (i < 0)
+		return COM_CMD_ERR_SAFE_NOT_FOUND;
+
+	if (cmd == CMDM10_SAFE_PWM_MAX)
+		_sysFSM->_selectedScheme->_safeMon->_highBound[i] = arg;
+
+	else if (cmd == CMDM11_SAFE_PWM_MIN)
+		_sysFSM->_selectedScheme->_safeMon->_lowBound[i] = arg;
+
+	return (COM_CMD_SAFE_UDATED);
+}
+
+int ComCmd_SetSafeCurr(int8_t cmd, float arg) {
+
+	int i;
+
+	if (_sysFSM->_fRunning)
+		return COM_CMD_ERR_SAFE_CONFIG;
+
+	i = FindSafePar(SAFE_ID_CURR);
+
+	if (i < 0)
+		return COM_CMD_ERR_SAFE_NOT_FOUND;
+
+	if (cmd == CMDM12_SAFE_CURR_MAX)
+		_sysFSM->_selectedScheme->_safeMon->_highBound[i] = arg;
+
+	else if (cmd == CMDM13_SAFE_CURR_MIN)
+		_sysFSM->_selectedScheme->_safeMon->_lowBound[i] = arg;
+
+	return (COM_CMD_SAFE_UDATED);
+}
+
+//*****************************************************************************
+//
+// Table of valid command strings, callback functions and help messages.  This
+// is used by the cmdline module.
+//
+//*****************************************************************************
+
+int ComCmd_StartCtl(int8_t cmd, float arg) {
+
+	_sysFSM->_fStart = true;
+
+	return (0);
+}
+
+int ComCmd_stopCtl(int8_t cmd, float arg) {
+
+	_sysFSM->_fStop = true;
+
+	return (0);
+}
+
+int ComCmd_SelScheme(int8_t cmd, float arg) {
+
+	_sysFSM->_selSchemeIdx = (uint32_t) arg;
+
+	_sysFSM->_fSelect = true;
+
+	return (0);
+}
+
+int ComCmd_SetRef(int8_t cmd, float arg) {
+
+	int i;
+
+	for (i = 0; i < _sysFSM->_selectedScheme->_refNum; ++i) {
+
+		if (_sysFSM->_selectedScheme->_refModules[i]->_Identifier == cmd) {
+
+			ComRef_SetOutput(_sysFSM->_selectedScheme->_refModules[i], &arg);
+
+			return (COM_CMD_REF_UDATED);
+		}
+	}
+
+	return (COM_CMD_ERR_REF_NOT_FOUND);
+}
+
+int ComCmd_UpdateSys(int8_t cmd, float arg) {
+
+	if (_sysFSM->_fRunning)
+		return COM_CMD_ERR_UPDATE_RUNNING;
+
+	UpdateSys();
+
+	return (0);
+}
+
+///////////////////////////////////////
+///////////////////////////////////////
+
+int32_t ComCmd_CmdLineRead(void) {
+
+	int32_t cmdStatus = 0;
+	int cmdLength;
+
+	if (!_sysFSM)
+		return COM_CMD_ERR_INIT;
+
+	if (!_sysFSM->_comMod->_IsEnable)
+		return COM_CMD_ERR_COM_MOD_DIS;
+
+	cmdLength = _sysFSM->_comMod->_getCmdLine(_sysFSM->_comMod->_moduleP,
+			(char *) g_cInput, &_sysFSM->_fSynched);
+
+	if (cmdLength > 0) {
+
+		cmdStatus = CmdLineProcess(g_cInput, cmdLength);
+
+		if (cmdStatus == COM_CMD_ERR_BAD_CMD) {
+
+			_sysFSM->_errCnt++;
+
+			if (_sysFSM->_errCnt >= COM_ERR_DESYNCH_NUM)
+				_sysFSM->_fSynched = false;
+
+			return COM_CMD_ERR_CRC;
+		}
+
+		return cmdStatus;
+	}
+
+	if (cmdLength == CMD_NOT_SYNCHED)
+		return COM_CMD_NOT_SYNCHED;
+
+	return COM_CMD_SYNCHED;
+}
+
+int32_t ComCmd_CmdLineWrite(void) {
+
+	int32_t cmdStatus = 0;
+
+	if (!_sysFSM)
+		return COM_CMD_ERR_INIT;
+
+	if (!_sysFSM->_comMod->_IsEnable)
+		return COM_CMD_ERR_COM_MOD_DIS;
+
+	if (!_sysFSM->_fSynched)
+		return COM_CMD_NOT_SYNCHED;
+
+	cmdStatus = SendCmd(_sysFSM->_cmdIDs, _sysFSM->_cmdArgs, _sysFSM->_cmdNum);
+
+	if (cmdStatus == COM_CMD_ERR_SEND) {
+
+		_sysFSM->_errCnt++;
+
+		if (_sysFSM->_errCnt >= COM_ERR_DESYNCH_NUM)
+			_sysFSM->_fSynched = false;
+
+		return COM_CMD_ERR_SEND;
+	}
+
+	return cmdStatus;
+
+}
+
+int CmdLineProcess(unsigned char *pcCmdLine, uint32_t cmdLength) {
+	unsigned char *pcChar;
+	uint16_t cmdCRC, computedCRC;
+	uint32_t cmdIndex = 0;
+	bool badCmd = false;
+
+	pcChar = pcCmdLine;
+
+	cmdCRC = (uint16_t) *(pcChar + cmdLength - 2);
+
+	computedCRC = CRCCCITT(pcChar, cmdLength - 2, 0xffff, 0);
+
+	pcChar[cmdLength - 2] = (unsigned char) ((computedCRC >> 8) & 0xff);
+
+	pcChar[cmdLength - 1] = (unsigned char) (computedCRC & 0xff);
+
+	computedCRC = CRCCCITT(pcChar, cmdLength, 0xffff, 0);
+
+	if (cmdCRC != computedCRC)
+		return COM_CMD_ERR_CRC;
+
+	cmdLength -= 2;
+
+	cmdIndex = 1;
+
+	//
+	// Advance through the command line until its end.
+	//
+	while (cmdIndex >= cmdLength) {
+
+		if ((int8_t) pcChar[cmdIndex] > CMDM_NUM)
+			badCmd = true;
+
+		if ((int8_t) pcChar[cmdIndex] < 0) {
+
+			g_psCmdTable[CMDM4_SET_REF]((int8_t) pcChar[cmdIndex],
+					(float) pcChar[cmdIndex + 1]);
+
+		} else {
+
+			g_psCmdTable[(int8_t) pcChar[cmdIndex]]((int8_t) pcChar[cmdIndex],
+					(float) pcChar[cmdIndex + 1]);
+		}
+
+		cmdIndex += 5;
+	}
+
+	if (badCmd)
+		return (COM_CMD_ERR_BAD_CMD);
+	else
+		return COM_CMD_SUCCESS;
+}
+
+//////////////////////////////////////////////
+// SLAVE (Tiva) Cmd Functions
+//////////////////////////////////////////////
+
+int SendCmd(const unsigned char * cmdIDs, float * cmdArgs, uint32_t cmdsNum) {
+
+	unsigned char * outBuf;
+	uint16_t cmdCRC;
+	int i;
+
+	uint8_t cmdLength = sizeof(uint8_t)
+			+ cmdsNum
+					* (sizeof(unsigned char) + sizeof(float) + sizeof(uint16_t))
+			+ sizeof(uint16_t);
+
+	if (cmdLength >= CMD_LENGTH_MAX)
+		return COM_CMD_ERR_SEND_TOO_LONG;
+
+	outBuf = (unsigned char *) malloc(cmdLength);
+
+	outBuf[0] = (unsigned char) cmdLength;
+
+	for (i = 0; i < cmdsNum; ++i) {
+
+		outBuf[1 + i * 5] = cmdIDs[i];
+
+		memcpy(outBuf + (2 + i * 5), cmdArgs + i, sizeof(float));
+	}
+
+	cmdCRC = CRCCCITT(outBuf, cmdLength - 2, 0xffff, 0);
+
+	outBuf[cmdLength - 2] = (unsigned char) ((cmdCRC >> 8) & 0xff);
+
+	outBuf[cmdLength - 1] = (unsigned char) (cmdCRC & 0xff);
+
+	cmdCRC = CRCCCITT(outBuf, cmdLength, 0xffff, 0);
+
+	outBuf[cmdLength - 2] = (unsigned char) ((cmdCRC >> 8) & 0xff);
+
+	outBuf[cmdLength - 1] = (unsigned char) (cmdCRC & 0xff);
+
+	if (_sysFSM->_comMod->_writeBuf(_sysFSM->_comMod->_moduleP, (char *) outBuf,
+			cmdLength) != cmdLength)
+		return COM_CMD_ERR_SEND;
+
+	free(outBuf);
+
+	return 0;
+}

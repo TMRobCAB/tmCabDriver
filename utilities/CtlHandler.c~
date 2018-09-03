@@ -1,0 +1,14 @@
+
+#include <utilities/CtlHandler.h>
+
+void CtlHandler_Construct(ClassCtlHandler * ctlModule, void * controller,
+		ClassIOPorts * ctlIOPorts,
+		void (*ComputeController)(void *),void (*ResetCtl)(void *), uint32_t (*GetCtlFS)(void *)) {
+
+	ctlModule->_controller = controller;
+	ctlModule->_IOPorts = ctlIOPorts;
+	ctlModule->_ComputeController = ComputeController;
+	ctlModule->_GetCtlFS = GetCtlFS;
+	ctlModule->_ResetCtl = ResetCtl;
+	ctlModule->_cycleCnt = 0;
+}

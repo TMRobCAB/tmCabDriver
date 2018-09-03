@@ -1,0 +1,110 @@
+#include "CurrentController.h"
+
+void CurrentCtl_Construct(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	CurrentCtl_Config(CurrentCtl, ctlFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	CtlHandler_Construct(&CurrentCtl->_currentHandler, (void*) CurrentCtl, &CurrentCtl->_currentIOPorts, CURRENT, CurrentCtl_ComputeCurrentCtl,
+			CurrentCtl_GetFS);
+}
+
+void CurrentCtl_Config(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	CurrentCtl->_currentFS = ctlFS;
+
+	PID_Construct(&CurrentCtl->_currentPID, &CurrentCtl->_currentFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	IOPorts_Construct(&CurrentCtl->_currentIOPorts, 1, 1, &CurrentCtl->_currentPID._ctlSignal);
+}
+
+void CurrentCtl_ComputeCurrentCtl(void * CurrentCtlV){
+
+	ClassCurrentCtl * CurrentCtl = (ClassCurrentCtl *) CurrentCtlV;
+
+	PID_setVarRef(&CurrentCtl->_currentPID,CurrentCtl_GetCurrentRef(CurrentCtl));
+	PID_ComputeCtl(&CurrentCtl->_currentPID, CurrentT_GetCurrent());
+}
+
+// Parameters Setters
+
+void CurrentCtl_SetFS(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS){
+
+	CurrentCtl->_currentFS = ctlFS;
+}
+
+void CurrentCtl_SetKP(ClassCurrentCtl * CurrentCtl, float ctlKP){
+
+	CurrentCtl->_currentPID._ctlKP = ctlKP;
+}
+
+void CurrentCtl_SetKI(ClassCurrentCtl * CurrentCtl, float ctlKI){
+
+	CurrentCtl->_currentPID._ctlKI = ctlKI;
+}
+
+void CurrentCtl_SetSat(ClassCurrentCtl * CurrentCtl, float ctlSat){
+
+	CurrentCtl->_currentPID._ctlSignalSat = ctlSat;
+}
+
+void CurrentCtl_SetISat(ClassCurrentCtl * CurrentCtl, float ctlISat){
+
+	CurrentCtl->_currentPID._ctlSignalISat = ctlISat;
+}
+
+// Parameters and variable Getters
+
+// Parameters
+
+uint32_t CurrentCtl_GetFS(void * CurrentCtlV){
+
+	ClassCurrentCtl * CurrentCtl = (ClassCurrentCtl *) CurrentCtlV;
+
+	return CurrentCtl->_currentFS;
+}
+
+float CurrentCtl_GetKP(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlKP;
+}
+
+float CurrentCtl_GetKI(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlKI;
+}
+float CurrentCtl_GetSat(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlSignalSat;
+}
+
+float CurrentCtl_GetISat(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlSignalISat;
+}
+
+// Variables
+
+float CurrentCtl_GetCurrentRef(ClassCurrentCtl * CurrentCtl){
+
+	return *IOPorts_GetInPort(&CurrentCtl->_currentIOPorts);
+}
+
+float CurrentCtl_GetCtlSignal(ClassCurrentCtl * CurrentCtl){
+
+	return *IOPorts_GetOutPort(&CurrentCtl->_currentIOPorts);
+}
+
+float CurrentCtl_GetCurrentError(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlVarError;
+}
+
+float CurrentCtl_GetCtlSignalP(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlSignalP;
+}
+
+float CurrentCtl_GetCtlSignalI(ClassCurrentCtl * CurrentCtl){
+
+	return CurrentCtl->_currentPID._ctlSignalI;
+}

@@ -1,0 +1,162 @@
+/***
+ *    _________     _____ __________  ___________    .__            _____                  _______      _______  ____
+ *    \_   ___ \   /  _  \\______   \ \__    ___/___ |  |   ____   /     \ _____    ____   \   _  \     \   _  \/_   |
+ *    /    \  \/  /  /_\  \|    |  _/   |    |_/ __ \|  | _/ __ \ /  \ /  \\__  \  /    \  /  /_\  \    /  /_\  \|   |
+ *    \     \____/    |    \    |   \   |    |\  ___/|  |_\  ___//    Y    \/ __ \|   |  \ \  \_/   \   \  \_/   \   |
+ *     \______  /\____|__  /______  /   |____| \___  >____/\___  >____|__  (____  /___|  /  \_____  / /\ \_____  /___|
+ *            \/         \/       \/               \/          \/        \/     \/     \/         \/  \/       \/
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <driverlib/rom.h>
+#include <utilities/ControlScheme.h>
+#include <utilities/RGBDriver.h>
+#include "Sensors/QEIModule.h"
+#include "Actuators/PWMModule.h"
+#include "Controllers/SumCtl.h"
+#include "Controllers/VirtJ.h"
+#include "Controllers/SensorInt.h"
+#include "Controllers/SpeedComp.h"
+#include "drivers/buttons.h"
+#include "ConfigTiva.h"
+#include "Communication/UARTModule.h"
+#include "Communication/ComCmds.h"
+
+#define K_FU -0.4895
+#define K_WU 13.9082
+
+uint32_t refIter = 0;
+
+ClassCtlScheme * g_ctlScheme;
+
+ClassCtlScheme * g_ctlScheme;
+
+int main(void) {
+
+	//
+	// Enable lazy stacking for interrupt handlers.  This allows floating-point
+	// instructions to be used within interrupt handlers, but at the expense of
+	// extra stack usage.
+	//
+	ROM_FPULazyStackingEnable();
+	ROM_FPUEnable();
+
+	// Initialize system Clock
+	TivaCfg_SysClk();
+
+	// Config RGB
+	RGB_Config();
+
+	// Config QEI
+	//QEI_Config(COMPUTE_ON_DEMAND);
+	QEI_Config(COMPUTE_EACH_PULSE);
+
+	uint32_t pwmFS = 100;
+
+	ForceT_Config(pwmFS);
+
+	// PWM Module
+	ClassPWM pwmModule;
+	PWM_Construct(&pwmModule, 0, 25000, 24, pwmFS);
+
+	//CtlScheme
+	ClassCtlScheme ctlScheme;
+
+
+
+
+
+
+
+	// CtlScheme_Construct(&ctlScheme, &pwmModule, pwmFS);
+
+
+
+
+
+
+	// Armature voltaje Adder
+	ClassSumCtl uaSum;
+	SumCtl_Construct(&uaSum,3,pwmFS);
+	SumCtl_SetKN(&uaSum,0,K_FU); // K for Fop
+	SumCtl_SetKN(&uaSum,1,K_WU); // K for wr
+
+	// Speed compensator
+	ClassSpeedCmp speedCmp;
+	SpeedCmp_Construct(&speedCmp,pwmFS,10,50,0,24,24);
+
+	// Virtual inertia
+	ClassVirtJ virtJ;
+	//Resorte Liviano
+	VirtJ_Construct(&virtJ,pwmFS,0.5,5,0.5,2);
+
+	//Resorte Liviano
+	//VirtJ_Construct(&virtJ,pwmFS,0.5,1,0.5,2);
+	VirtJ_SetPosLim(&virtJ,3.14/6);
+
+	// Sensors
+	ClassSensorInt speedSens;
+	SensorInt_Construct(&speedSens,QEI_SPEED,pwmFS);
+	ClassSensorInt posSens;
+	SensorInt_Construct(&posSens,QEI_POS,pwmFS);
+	ClassSensorInt forceSens;
+	SensorInt_Construct(&forceSens,FORCE,pwmFS);
+
+	// Blocks Connection
+	//////////////////////
+	CtlScheme_Connect(&ctlScheme,&uaSum._Handler,&pwmModule._Handler);
+	CtlScheme_ConnectSignal(&ctlScheme,&speedCmp._Handler,0,&uaSum._Handler,2);
+	CtlScheme_ConnectSignal(&ctlScheme,&virtJ._Handler,0,&uaSum._Handler,1);
+	CtlScheme_ConnectSignal(&ctlScheme,&virtJ._Handler,0,&speedCmp._Handler,0);
+
+	// Sensor Conection
+	/////////////////////
+	// Virtual inertia
+	CtlScheme_ConnectSignal(&ctlScheme,&forceSens._Handler,0,&virtJ._Handler,0);
+	CtlScheme_ConnectSignal(&ctlScheme,&speedSens._Handler,0,&virtJ._Handler,1);
+	CtlScheme_ConnectSignal(&ctlScheme,&posSens._Handler,0,&virtJ._Handler,2);
+
+	// Speed Compensator
+	CtlScheme_ConnectSignal(&ctlScheme,&speedSens._Handler,0,&speedCmp._Handler,1);
+
+	// uaSum
+	CtlScheme_ConnectSignal(&ctlScheme,&forceSens._Handler,0,&uaSum._Handler,0);
+
+	ClassUART uartModule;
+	UART_Construct(&uartModule, 1, 115200, SysCtlClockGet(), pwmFS);
+
+	//CtlScheme_ConfigSafe(&ctlScheme, PI / 1.5);
+
+	g_ctlScheme = &ctlScheme;
+
+	UART_Enable(&uartModule);
+
+	UARTEchoSet(false);
+
+	QEI_Start();
+
+	char message[11] = "I'm alive!";
+
+	UARTwrite(message,11);
+
+	while (1) {
+
+		if (!CtlScheme_IsRunning(&ctlScheme)) {
+
+			QEI_SetPosition(0);
+
+			ComCmd_CmdLineRead();
+
+			ComCmd_CmdLineWrite();
+
+			//CtlScheme_Start(&ctlScheme);
+
+		} else {
+
+			CtlScheme_Compute(&ctlScheme);
+		}
+
+		SysCtlDelay(100);
+	}
+}

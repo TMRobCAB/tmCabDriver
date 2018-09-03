@@ -1,0 +1,59 @@
+#ifndef POSCTL
+
+#define POSCTL
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "Sensors/QEIModule.h"
+#include "Modules/PIDCtl.h"
+#include "utils/ModuleIOPorts.h"
+#include "utils/CtlHandler.h"
+
+//*****************************************************************************
+//
+// Global variables of PositionController.c
+//
+//*****************************************************************************
+
+typedef struct ClassPosCtl ClassPosCtl;
+
+struct ClassPosCtl{
+
+	uint32_t _posFS;
+
+	ClassPID _posPID;
+
+	ClassIOPorts _posIOPorts;
+
+	ClassCtlHandler _posHandler;
+
+};
+
+//*****************************************************************************
+//
+// Functions defined in PositionController.c that are made available to other files.
+//
+//*****************************************************************************
+void PosCtl_Construct(ClassPosCtl * posCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+void PosCtl_Config(ClassPosCtl * posCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+float PosCtl_GetPosRef(ClassPosCtl * posCtl);
+float PosCtl_GetCtlSignal(ClassPosCtl * posCtl);
+
+void PosCtl_ComputePosCtl(void * posCtlV);
+
+void PosCtl_SetFS(ClassPosCtl * posCtl, uint32_t ctlFS);
+void PosCtl_SetKP(ClassPosCtl * posCtl, float ctlKP);
+void PosCtl_SetKI(ClassPosCtl * posCtl, float ctlKI);
+void PosCtl_SetSat(ClassPosCtl * posCtl, float ctlSat);
+void PosCtl_SetISat(ClassPosCtl * posCtl, float ctlISat);
+
+uint32_t PosCtl_GetFS(void * posCtlV);
+float PosCtl_GetKP(ClassPosCtl * posCtl);
+float PosCtl_GetKI(ClassPosCtl * posCtl);
+float PosCtl_GetSat(ClassPosCtl * posCtl);
+float PosCtl_GetISat(ClassPosCtl * posCtl);
+
+#endif

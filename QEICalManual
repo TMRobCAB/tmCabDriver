@@ -1,0 +1,79 @@
+/***
+ *    _________     _____ __________  ___________    .__            _____                  _______      _______  ____
+ *    \_   ___ \   /  _  \\______   \ \__    ___/___ |  |   ____   /     \ _____    ____   \   _  \     \   _  \/_   |
+ *    /    \  \/  /  /_\  \|    |  _/   |    |_/ __ \|  | _/ __ \ /  \ /  \\__  \  /    \  /  /_\  \    /  /_\  \|   |
+ *    \     \____/    |    \    |   \   |    |\  ___/|  |_\  ___//    Y    \/ __ \|   |  \ \  \_/   \   \  \_/   \   |
+ *     \______  /\____|__  /______  /   |____| \___  >____/\___  >____|__  (____  /___|  /  \_____  / /\ \_____  /___|
+ *            \/         \/       \/               \/          \/        \/     \/     \/         \/  \/       \/
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <driverlib/rom.h>
+#include "Sensors/QEIModule.h"
+#include  "Actuators/PWMModule.h"
+#include "utils/ControlScheme.h"
+#include "utils/RGBDriver.h"
+#include "Controllers/PositionController.h"
+#include "utils/MainMenu.h"
+#include "drivers/buttons.h"
+#include "ConfigTiva.h"
+#include "Communication/UARTModule.h"
+
+int main(void) {
+
+	//
+	// Enable lazy stacking for interrupt handlers.  This allows floating-point
+	// instructions to be used within interrupt handlers, but at the expense of
+	// extra stack usage.
+	//
+	ROM_FPULazyStackingEnable();
+	ROM_FPUEnable();
+
+	// Initialize system Clock
+	TivaCfg_SysClk();
+
+	// Config RGB
+	RGB_Config();
+
+	// Initialize buttons
+	ButtonsInit();
+
+	// Config QEI
+	QEI_Config();
+
+	uint32_t currCtlFS = 100;
+
+	ForceT_Config(currCtlFS);
+
+	ClassPWM pwmModule;
+	PWM_Construct(&pwmModule, 0, 25000, 12, currCtlFS);
+
+	ClassPosCtl posCtl;
+	PosCtl_Construct(&posCtl,currCtlFS,0,0,0,0,0);
+
+	ClassCtlScheme ctlScheme;
+	CtlScheme_Construct(&ctlScheme, &pwmModule, currCtlFS);
+
+	CtlScheme_Connect(&ctlScheme,&posCtl._posHandler,&pwmModule._pwmHandler);
+
+	ClassUART uartLog;
+	UART_Construct(&uartLog, 1, 115200, SysCtlClockGet(), currCtlFS, LOGGER);
+
+	CtlScheme_AddComModule(&ctlScheme, &uartLog._uartHandeler);
+
+	float dcRef = 0; //[A]
+
+	pwmModule._IOPorts._inPortsAdder[0] = &dcRef;
+
+	UART_AddVar2LogStream(&uartLog, &posCtl._posPID._ctlVar, "QEI");
+
+	UART_Enable(&uartLog);
+
+	while (1) {
+
+
+		runMenu(&ctlScheme);
+	}
+
+}

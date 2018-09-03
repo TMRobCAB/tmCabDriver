@@ -1,0 +1,119 @@
+/***
+ *    _________     _____ __________  ___________    .__            _____                  _______      _______  ____
+ *    \_   ___ \   /  _  \\______   \ \__    ___/___ |  |   ____   /     \ _____    ____   \   _  \     \   _  \/_   |
+ *    /    \  \/  /  /_\  \|    |  _/   |    |_/ __ \|  | _/ __ \ /  \ /  \\__  \  /    \  /  /_\  \    /  /_\  \|   |
+ *    \     \____/    |    \    |   \   |    |\  ___/|  |_\  ___//    Y    \/ __ \|   |  \ \  \_/   \   \  \_/   \   |
+ *     \______  /\____|__  /______  /   |____| \___  >____/\___  >____|__  (____  /___|  /  \_____  / /\ \_____  /___|
+ *            \/         \/       \/               \/          \/        \/     \/     \/         \/  \/       \/
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <driverlib/rom.h>
+#include "Sensors/QEIModule.h"
+#include  "Actuators/PWMModule.h"
+#include "utils/ControlScheme.h"
+#include "utils/RGBDriver.h"
+#include "Controllers/SpeedController.h"
+#include "Controllers/PositionController.h"
+#include "Controllers/CurrentController.h"
+#include "utils/MainMenu.h"
+#include "drivers/buttons.h"
+#include "ConfigTiva.h"
+#include "Communication/UARTModule.h"
+#include "Storage/USBStickModule.h"
+#include "Sensors/CurrentMeas.h"
+
+//#define TARGET_IS_BLIZZARD_RB1
+
+uint32_t refIter = 0;
+
+int main(void) {
+
+	//
+	// Enable lazy stacking for interrupt handlers.  This allows floating-point
+	// instructions to be used within interrupt handlers, but at the expense of
+	// extra stack usage.
+	//
+	ROM_FPULazyStackingEnable();
+	ROM_FPUEnable();
+
+	// Initialize system Clock
+	TivaCfg_SysClk();
+
+	// Config RGB
+	RGB_Config();
+
+	// Initialize buttons
+	ButtonsInit();
+
+	// Config QEI
+	QEI_Config();
+
+	// Current Transducer config
+	CurrentT_Config();
+
+	uint32_t currCtlFS = 1000;
+
+	ClassPWM pwmModule;
+	PWM_Construct(&pwmModule, 0, 25000, 12, currCtlFS);
+
+	ClassCtlScheme ctlScheme;
+	CtlScheme_Construct(&ctlScheme, &pwmModule, currCtlFS);
+
+	ClassUSBStick stickStorage;
+	USBStick_Construct(&stickStorage, currCtlFS);
+	USBStick_Enable(&stickStorage);
+	while (_deviceState != eSTATE_DEVICE_READY) {
+		USBStick_Run(&stickStorage);
+	}
+
+	CtlScheme_AddComModule(&ctlScheme, &stickStorage._USBStickHandler);
+
+	float dcRef = 0; //[A]
+
+	pwmModule._IOPorts._inPortsAdder[0] = &dcRef;
+	pwmModule._IOPorts._inAdderPortsNum++;
+
+	USBStick_AddVar2Stream(&stickStorage, &dcRef, "Current");
+
+	while (1) {
+
+		if (CtlScheme_IsRunning(&ctlScheme) == false) {
+
+			USBStick_Run(&stickStorage);
+		}
+
+		runMenu(&ctlScheme);
+
+		while (dcRef <= 12) {
+		runMenu(&ctlScheme);
+			if (refIter >= 300000 * 1.5 && CtlScheme_IsRunning(&ctlScheme)) {
+
+				refIter = 0;
+
+				dcRef += 0.5;
+
+			} else {
+
+				refIter++;
+			}
+		}
+		dcRef = 0;
+		while (dcRef >= -12) {
+			runMenu(&ctlScheme);
+			if (refIter >= 300000 * 1.5 && CtlScheme_IsRunning(&ctlScheme)) {
+
+				refIter = 0;
+
+				dcRef -= 0.5;
+
+			} else {
+
+				refIter++;
+			}
+		}
+
+		CtlScheme_Stop(&ctlScheme);
+	}
+}

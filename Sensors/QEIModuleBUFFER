@@ -1,0 +1,436 @@
+//TODO: change interrupt names, create a new one for the other timer, change timer config to wide timer, add every time the couter overflows check if you can use multiple interrupts from timer
+
+#include "QEIModule.h"
+
+#include <inc/tm4c123gh6pm.h>
+
+// Speed estimation variables
+volatile uint32_t _dNSpeedGet = 0;
+volatile bool _speedBufferFull = false;
+volatile bool _speedValueRead = false;
+volatile float _dNSpeedLapTotal = 0;
+volatile float _dNSpeedTotal = 0;
+volatile float _dNSpeed = 0;
+volatile uint8_t _encCounts = 0;
+volatile uint8_t _encIndexValue = 0;
+// Speed buffer
+volatile uint32_t _oldDNSpeed[ENC_COUNTS_LAP];
+// Speed RadSec old
+float _speedRadSecOld = 0;
+// Speed RadSec threshold
+float _speedRadSecTh = 0;
+
+void QEI_Start(void) {
+
+	QEI_EnablePosMeas();
+	QEI_SetPosition(0);
+
+	QEI_EnableSpeedMeas();
+}
+
+void QEI_Stop(void) {
+
+	QEI_DisablePosMeas();
+
+	QEI_DisableSpeedMeas();
+}
+
+void QEI_Config(void) {
+
+	QEI_PosConfig();
+
+	QEI_SpeedCaptureConfig();
+}
+
+///////////////////////////////
+// QEI module configuration
+///////////////////////////////
+
+void QEI_PosConfig(void) {
+
+	UnlockPD7();
+
+	SysCtlPeripheralEnable(QEI_PERISPH); //habilitando el enconder
+
+	//Set Pins to be PHA0 and PHB0 para la lectura del encoder
+	GPIOPinConfigure(QEI_GPIO_PHA0);
+	GPIOPinConfigure(QEI_GPIO_PHB0);
+
+	//Set GPIO pins for QEI. PhA0 -> PD6, PhB0 ->PD7. I believe this sets the pull up and makes them inputs
+	GPIOPinTypeQEI(QEI_PORT, QEI_PHA0_PIN | QEI_PHB0_PIN);
+
+	//DISable peripheral and int before configuration
+	QEIDisable(QEI_BASE);
+	QEIIntDisable(QEI_BASE, QEI_INT_DIS);
+
+	//configurando el enconder
+	QEIConfigure(QEI_BASE, QEI_CONFIG, QEI_MAX_COUNT);
+}
+
+void QEI_EnablePosMeas(void) {
+
+	// Enable the quadrature encoder.
+	QEIEnable(QEI_BASE);
+}
+
+void QEI_DisablePosMeas(void) {
+
+	// disable the quadrature encoder.
+	QEIDisable(QEI_BASE);
+}
+
+///////////////////////////////////////
+// Speed Capture Timer configuration
+///////////////////////////////////////
+void QEI_SpeedCaptureConfig(void) {
+
+	// Configure CHA capture timer
+	//////////////////////////////
+
+	IntPrioritySet(CAPTURE_TIMER_CHA_INT, CAPTURE_TIMER_CHA_PRIORITY);
+
+// Enable the capture timer
+	SysCtlPeripheralEnable(CAPTURE_TIMER_CHA_PERIPH);
+
+	TimerClockSourceSet(CAPTURE_TIMER_CHA_BASE, TIMER_CLOCK_SYSTEM);
+
+// Configure pin PXX (see ConfigTiva.h) to work as a CCP
+	GPIOPinConfigure(CAPTURE_TIMER_CHA_GPIO_PIN_CFG);
+	GPIOPinTypeTimer(CAPTURE_TIMER_CHA_GPIO_PORT, CAPTURE_TIMER_CHA_GPIO_PIN);
+
+// Setup the interrupt for both edges capture timer
+	TimerConfigure(CAPTURE_TIMER_CHA_BASE,
+	TIMER_CFG_SPLIT_PAIR | CAPTURE_TIMER_CHA_MODE);
+	TimerPrescaleMatchSet(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_MODULE,
+	CAPTURE_TIMER_PRE_SCALE);
+	TimerControlEvent(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_MODULE,
+	CAPTURE_TIMER_EVENT);
+
+	TimerPrescaleSet(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_MODULE, 0);
+
+	// Configure CHB capture timer
+	//////////////////////////////
+
+	IntPrioritySet(CAPTURE_TIMER_CHB_INT, CAPTURE_TIMER_CHB_PRIORITY);
+
+	// Enable the capture timer
+	SysCtlPeripheralEnable(CAPTURE_TIMER_CHB_PERIPH);
+
+	TimerClockSourceSet(CAPTURE_TIMER_CHB_BASE, TIMER_CLOCK_SYSTEM);
+
+	// Configure pin PXX (see ConfigTiva.h) to work as a CCP
+	GPIOPinConfigure(CAPTURE_TIMER_CHB_GPIO_PIN_CFG);
+	GPIOPinTypeTimer(CAPTURE_TIMER_CHB_GPIO_PORT, CAPTURE_TIMER_CHB_GPIO_PIN);
+
+	// Setup the interrupt for both edges capture timer
+	TimerConfigure(CAPTURE_TIMER_CHB_BASE,
+	TIMER_CFG_SPLIT_PAIR | CAPTURE_TIMER_CHB_MODE);
+	TimerPrescaleMatchSet(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_MODULE,
+	CAPTURE_TIMER_PRE_SCALE);
+	TimerControlEvent(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_MODULE,
+	CAPTURE_TIMER_EVENT);
+
+	TimerPrescaleSet(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_MODULE, 0);
+
+	TimerSynchronize(TIMER0_BASE,
+	CAPTURE_TIMER_CHA_SYNC | CAPTURE_TIMER_CHB_SYNC);
+	TimerSynchronize(TIMER0_BASE, 0);
+}
+
+void QEI_EnableSpeedMeas(void) {
+
+	// TODO: BORRAR si el promedio de vuelta no funciona
+	// treshold speed gives 1 p/ctlCycle
+	_speedRadSecTh = (float) (2 * PI * 1000 / QEI_MAX_COUNT);
+	//
+	//
+
+	RstSpeedGlobalVars();
+
+	EnableSpeedCapture();
+}
+
+void QEI_DisableSpeedMeas(void) {
+
+	RstSpeedGlobalVars();
+
+	DisableSpeedCapture();
+}
+
+void EnableSpeedCapture(void) {
+
+// Clear Timers capture int flag
+	TimerIntClear(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_EVENT_INT);
+	TimerIntClear(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_EVENT_INT);
+
+// Enable Timers capture int
+	TimerIntEnable(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_EVENT_INT);
+	IntEnable(CAPTURE_TIMER_CHB_INT);
+
+	TimerIntEnable(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_EVENT_INT);
+	IntEnable(CAPTURE_TIMER_CHA_INT);
+
+// Enable the capture timer.
+	TimerEnable(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_MODULE);
+	TimerEnable(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_MODULE);
+}
+
+void DisableSpeedCapture(void) {
+
+// Disable capture timers.
+	TimerDisable(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_MODULE);
+	TimerDisable(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_MODULE);
+
+// Disable Timer capture int
+	IntDisable(CAPTURE_TIMER_CHB_INT);
+	TimerIntDisable(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_EVENT_INT);
+	IntDisable(CAPTURE_TIMER_CHA_INT);
+	TimerIntDisable(CAPTURE_TIMER_CHA_BASE, CAPTURE_TIMER_CHA_EVENT_INT);
+}
+
+//////////////////////////////////
+//	QEI Module Functions
+//////////////////////////////////
+
+// Position functions
+/////////////////////
+
+uint32_t QEI_GetPosition(void) {
+	return QEIPositionGet(QEI_BASE);
+}
+
+float QEI_GetPosRad(void) {
+
+	//Calculate position in Rad
+	return ((((float) QEIPositionGet(QEI_BASE)) * 2 / QEI_MAX_COUNT) - 1) * PI;
+}
+
+bool QEI_SetPosition(float posRadSec) {
+
+	//check if the given position is within joint range
+	if (posRadSec > -ROBOT_MAX_Q && posRadSec < ROBOT_MAX_Q) {
+
+		//Calculate position in Counts
+		uint32_t posCnt = (uint32_t) ((posRadSec / PI + 1) * QEI_MAX_COUNT / 2);
+
+		QEIPositionSet(QEI_BASE, posCnt);
+
+		return true;
+	} else {
+
+		return false;
+	}
+}
+
+// Speed Functions
+//////////////////
+
+void QEI_CaptureSpeed0IntHandler(void) {
+
+	// Clear Timer capture int flag
+	TimerIntClear(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_EVENT_INT);
+
+	// Read amount of cycles between encoder edges
+	_dNSpeedGet = TimerValueGet(CAPTURE_TIMER_CHB_BASE,
+	CAPTURE_TIMER_CHB_MODULE);
+
+	//clear the dNspeed acumulator and edge counter when the controller has read the value
+	if (_speedValueRead) {
+		_dNSpeedLapTotal = 0;
+		_encCounts = 0;
+		_speedValueRead = false;
+		_dNSpeedTotal = 0;
+	}
+
+	// Calculate single step speed estimation
+	if (_dNSpeedGet > _dNSpeed)
+
+		_dNSpeed += (float) _dNSpeedGet - _dNSpeed;
+	else
+
+		_dNSpeed += (float) CAPTURE_TIMER_MAX_CNT
+				+ ((int32_t) (_dNSpeedGet - _dNSpeed));
+
+	// Calculate single speed total estimation
+	_dNSpeedTotal += (float) _dNSpeed;
+
+	//Calculate dNspeed if the encoder lap buffer is ready
+	if (_speedBufferFull) {
+		//Calculate the n'th dNSpeed checking the counter's overflow and Increment the acumulator
+		if (_dNSpeedGet > _oldDNSpeed[_encIndexValue]) {
+
+			_dNSpeedLapTotal += (float) _dNSpeedGet
+					- _oldDNSpeed[_encIndexValue];
+		} else {
+
+			_dNSpeedLapTotal += (float) CAPTURE_TIMER_MAX_CNT
+					+ ((int32_t) (_dNSpeedGet - _oldDNSpeed[_encIndexValue]));
+		}
+
+		//Increment the pulse counter
+		_encCounts++;
+
+		//save current value as old for the next iteration
+		_oldDNSpeed[_encIndexValue] = _dNSpeedGet;
+
+	} else {
+
+		_oldDNSpeed[_encIndexValue] = _dNSpeedGet;
+	}
+
+	if (_encIndexValue >= ENC_COUNTS_LAP - 1) {
+
+		_encIndexValue = 0;
+		_speedBufferFull = true;
+	} else {
+
+		_encIndexValue++;
+	}
+
+}
+
+void QEI_CaptureSpeed0IntHandler(void) {
+
+	// Clear Timer capture int flag
+	TimerIntClear(CAPTURE_TIMER_CHB_BASE, CAPTURE_TIMER_CHB_EVENT_INT);
+
+	// Read amount of cycles between encoder edges
+	_dNSpeedGet = TimerValueGet(CAPTURE_TIMER_CHB_BASE,
+	CAPTURE_TIMER_CHB_MODULE);
+
+	//clear the dNspeed acumulator and edge counter when the controller has read the value
+	if (_speedValueRead) {
+		_dNSpeedLapTotal = 0;
+		_encCounts = 0;
+		_speedValueRead = false;
+		_dNSpeedTotal = 0;
+	}
+
+	// Calculate single step speed estimation
+	if (_dNSpeedGet > _dNSpeed)
+
+		_dNSpeed += (float) _dNSpeedGet - _dNSpeed;
+	else
+
+		_dNSpeed += (float) CAPTURE_TIMER_MAX_CNT
+				+ ((int32_t) (_dNSpeedGet - _dNSpeed));
+
+	// Calculate single speed total estimation
+	_dNSpeedTotal += (float) _dNSpeed;
+
+	//Calculate dNspeed if the encoder lap buffer is ready
+	if (_speedBufferFull) {
+		//Calculate the n'th dNSpeed checking the counter's overflow and Increment the acumulator
+		if (_dNSpeedGet > _oldDNSpeed[_encIndexValue]) {
+
+			_dNSpeedLapTotal += (float) _dNSpeedGet
+					- _oldDNSpeed[_encIndexValue];
+		} else {
+
+			_dNSpeedLapTotal += (float) CAPTURE_TIMER_MAX_CNT
+					+ ((int32_t) (_dNSpeedGet - _oldDNSpeed[_encIndexValue]));
+		}
+
+		//Increment the pulse counter
+		_encCounts++;
+
+		//save current value as old for the next iteration
+		_oldDNSpeed[_encIndexValue] = _dNSpeedGet;
+
+	} else {
+
+		_oldDNSpeed[_encIndexValue] = _dNSpeedGet;
+	}
+
+	if (_encIndexValue >= ENC_COUNTS_LAP - 1) {
+
+		_encIndexValue = 0;
+		_speedBufferFull = true;
+	} else {
+
+		_encIndexValue++;
+	}
+
+}
+
+float QEI_GetSpeedRadSec(void) {
+
+	float dNSpeedTotalBuff;
+	uint8_t encCountsBuff;
+
+	// Estimate Speed as a lap average if speed is high enough and
+	// speed buffer is already loaded
+	if (_speedRadSecOld > _speedRadSecTh && _speedBufferFull) {
+
+		// Disable interrupts and buffer lap captured data
+		IntMasterDisable();
+
+		dNSpeedTotalBuff = _dNSpeedLapTotal;
+		encCountsBuff = _encCounts;
+		_speedValueRead = true;
+
+		IntMasterEnable();
+
+		// Save estimated speed as old
+		_speedRadSecOld = (float) (QEIDirectionGet(QEI0_BASE) * 2 * PI
+				* ENC_COUNTS_LAP * SysCtlClockGet() * encCountsBuff
+				/ dNSpeedTotalBuff / QEI_MAX_COUNT);
+
+		// Estimate speed with single pulse technique
+	} else {
+
+		// Disable interrupts and buffer pulse captured data
+		IntMasterDisable();
+
+		dNSpeedTotalBuff = _dNSpeedTotal;
+		encCountsBuff = _encCounts;
+		_speedValueRead = true;
+
+		IntMasterEnable();
+
+		// Save estimated speed as old
+		_speedRadSecOld = (float) (QEIDirectionGet(QEI0_BASE) * 2 * PI
+				* SysCtlClockGet() * encCountsBuff / dNSpeedTotalBuff
+				/ QEI_MAX_COUNT);
+	}
+
+	return _speedRadSecOld;
+
+}
+
+void UnlockPD7(void) {
+
+// Write this 'key' 0x4C4F434B into Port D's Lock register to enable access to Port D's Commit register
+	GPIO_PORTD_LOCK_R = 0x4C4F434B;
+
+// Flip only bit 7 ON to ALLOW Port D bit 7 to be switched from NMI use to QEI use
+	GPIO_PORTD_CR_R |= 0x80;
+
+// Switch pin usage
+	GPIO_PORTD_AFSEL_R |= 0x80;     // Selects alternative usage for the pin
+	GPIO_PORTD_PCTL_R |= 0x60000000; // Selects QEI0 PHB0 in particular (pages 722 & 1405 in LM4F232H5QD manual)
+
+// Flip only bit 7 OFF to Re-lock
+	GPIO_PORTD_CR_R &= !0x08;
+
+}
+
+void RstSpeedGlobalVars(void) {
+
+	int i;
+
+	for (i = 0; i < ENC_COUNTS_LAP; ++i) {
+
+		_oldDNSpeed[i] = 0x1000000;
+	}
+
+	_dNSpeedTotal = 0;
+	_dNSpeed = 0;
+	_speedBufferFull = false;
+	_speedValueRead = false;
+	_dNSpeedLapTotal = 0;
+	_encCounts = 0;
+	_encIndexValue = 0;
+
+	_speedRadSecOld = 0;
+}

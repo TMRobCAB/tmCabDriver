@@ -1,0 +1,67 @@
+#ifndef SPEEDCTL
+
+#define SPEEDCTL
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "Sensors/QEIModule.h"
+#include "Modules/PIDCtl.h"
+#include "utils/ModuleIOPorts.h"
+#include "utils/CtlHandler.h"
+
+//*****************************************************************************
+//
+// Global variables of SpeedController.c
+//
+//*****************************************************************************
+
+typedef struct ClassSpeedCtl ClassSpeedCtl;
+
+struct ClassSpeedCtl{
+
+	uint32_t _speedFS;
+
+	ClassPID _speedPID;
+
+	ClassIOPorts _speedIOPorts;
+
+	ClassCtlHandler _speedHandler;
+};
+
+
+
+//*****************************************************************************
+//
+// Functions defined in PositionController.c
+//
+//*****************************************************************************
+
+
+//*****************************************************************************
+//
+// Functions defined in PositionController.c that are made available to other files.
+//
+//*****************************************************************************
+void SpeedCtl_Construct(ClassSpeedCtl * speedCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+void SpeedCtl_Config(ClassSpeedCtl * speedCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+float SpeedCtl_GetSpeedRef(ClassSpeedCtl * speedCtl);
+float SpeedCtl_GetCtlSignal(ClassSpeedCtl * speedCtl);
+
+void SpeedCtl_ComputeSpeedCtl(void * speedCtlV);
+
+void SpeedCtl_SetFS(ClassSpeedCtl * speedCtl, uint32_t ctlFS);
+void SpeedCtl_SetKP(ClassSpeedCtl * speedCtl, float ctlKP);
+void SpeedCtl_SetKI(ClassSpeedCtl * speedCtl, float ctlKI);
+void SpeedCtl_SetSat(ClassSpeedCtl * speedCtl, float ctlSat);
+void SpeedCtl_SetISat(ClassSpeedCtl * speedCtl, float ctlISat);
+
+uint32_t SpeedCtl_GetFS(void * speedCtlV);
+float SpeedCtl_GetKP(ClassSpeedCtl * speedCtl);
+float SpeedCtl_GetKI(ClassSpeedCtl * speedCtl);
+float SpeedCtl_GetSat(ClassSpeedCtl * speedCtl);
+float SpeedCtl_GetISat(ClassSpeedCtl * speedCtl);
+
+#endif

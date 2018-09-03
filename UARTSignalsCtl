@@ -1,0 +1,146 @@
+/***
+ *    _________     _____ __________  ___________    .__            _____                  _______      _______  ____
+ *    \_   ___ \   /  _  \\______   \ \__    ___/___ |  |   ____   /     \ _____    ____   \   _  \     \   _  \/_   |
+ *    /    \  \/  /  /_\  \|    |  _/   |    |_/ __ \|  | _/ __ \ /  \ /  \\__  \  /    \  /  /_\  \    /  /_\  \|   |
+ *    \     \____/    |    \    |   \   |    |\  ___/|  |_\  ___//    Y    \/ __ \|   |  \ \  \_/   \   \  \_/   \   |
+ *     \______  /\____|__  /______  /   |____| \___  >____/\___  >____|__  (____  /___|  /  \_____  / /\ \_____  /___|
+ *            \/         \/       \/               \/          \/        \/     \/     \/         \/  \/       \/
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <driverlib/rom.h>
+#include "Sensors/QEIModule.h"
+#include  "Actuators/PWMModule.h"
+#include "utils/ControlScheme.h"
+#include "utils/RGBDriver.h"
+#include "Controllers/SpeedController.h"
+#include "Controllers/RefUART.h"
+#include "Controllers/PositionController.h"
+#include "utils/MainMenu.h"
+#include "drivers/buttons.h"
+#include "ConfigTiva.h"
+#include "Communication/UARTModule.h"
+#include "Storage/USBStickModule.h"
+#include "Sensors/CurrentMeas.h"
+
+//#define TARGET_IS_BLIZZARD_RB1
+
+uint32_t refIter = 0;
+
+int main(void) {
+
+	//
+	// Enable lazy stacking for interrupt handlers.  This allows floating-point
+	// instructions to be used within interrupt handlers, but at the expense of
+	// extra stack usage.
+	//
+	ROM_FPULazyStackingEnable();
+	ROM_FPUEnable();
+
+	// Initialize system Clock
+	TivaCfg_SysClk();
+
+	// Config RGB
+	RGB_Config();
+
+	// Initialize buttons
+	ButtonsInit();
+
+	// Config QEI
+	QEI_Config();
+
+	uint32_t uartFS = 50;
+
+	ClassPWM pwmModule;
+	PWM_Construct(&pwmModule, 0, 25000, 12, uartFS);
+
+	ClassCtlScheme ctlScheme;
+	CtlScheme_Construct(&ctlScheme, &pwmModule, uartFS);
+
+	ClassUSBStick stickStorage;
+	USBStick_Construct(&stickStorage, uartFS, LOGGER);
+	USBStick_Enable(&stickStorage);
+	while (_deviceState != eSTATE_DEVICE_READY) {
+		USBStick_Run(&stickStorage);
+	}
+
+	ClassUART uartModule;
+	UART_Construct(&uartModule, 1, 115200, SysCtlClockGet(), uartFS,
+			SIGNAL_OUT);
+
+	CtlScheme_AddComModule(&ctlScheme, &uartModule._uartHandeler);
+	CtlScheme_AddComModule(&ctlScheme, &stickStorage._USBStickHandler);
+
+	UART_Enable(&uartModule);
+
+	float posKP = 6;
+	float posKI = 0;
+	float posSat = 3;
+	float posISat = 1;
+
+	ClassPosCtl posCtl;
+	PosCtl_Construct(&posCtl, uartFS, posKP, posKI, 0, posSat, posISat);
+
+	ClassRefUART refUartDist;
+
+	refUart_Construct(&refUartDist, &uartModule, uartFS /2, 1, "d");
+
+	ClassRefUART refUartPos;
+
+	refUart_Construct(&refUartPos, &uartModule, uartFS /4, 1, "g");
+
+	CtlScheme_Connect(&ctlScheme, &refUartDist._rUartHandler, &posCtl._posHandler);
+
+	CtlScheme_Connect(&ctlScheme, &refUartPos._rUartHandler, &posCtl._posHandler);
+
+
+	CtlScheme_Connect(&ctlScheme, &posCtl._posHandler, &pwmModule._pwmHandler);
+
+	USBStick_AddVar2Stream(&stickStorage, &refUartDist._rUartOutSignal, "slaveDist");
+	USBStick_AddVar2Stream(&stickStorage, &refUartPos._rUartOutSignal, "slavePos");
+	USBStick_AddVar2Stream(&stickStorage, &posCtl._posPID._ctlVar, "masterPos");
+
+
+	UART_AddSignal2SigStream(&uartModule, &posCtl._posPID._ctlVar, "p");
+
+	SysCtlDelay(20000000);
+
+	UARTEchoSet(false);
+
+	char sBuff[10];
+	sBuff[0] = 'a';
+
+	UART_PrintString(&uartModule, "s");
+
+	while (sBuff[0] != 'o')
+		sBuff[0] = UARTgetc();
+
+	UART_PrintString(&uartModule, "p");
+
+	int i;
+
+	for (i = 0; i < 4; ++i) {
+
+		UARTgetc();
+
+	}
+
+	UART_PrintString(&uartModule, "r");
+
+	sBuff[0] = 'a';
+
+	while (sBuff[0] != 's')
+		sBuff[0] = UARTgetc();
+
+	while (1) {
+
+		if (CtlScheme_IsRunning(&ctlScheme) == false) {
+
+			USBStick_Run(&stickStorage);
+		}
+
+		runMenu(&ctlScheme);
+
+	}
+}

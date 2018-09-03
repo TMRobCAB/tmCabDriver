@@ -1,0 +1,86 @@
+#include "VirtualForceRef.h"
+
+void VForceRef_Construct(ClassVForceRef * vForceRef, uint32_t vForceRefFS, float kStiff, float kDamp){
+
+	VForceRef_Config(vForceRef, vForceRefFS, kStiff, kDamp);
+
+	CtlHandler_Construct(&vForceRef->_vForceHandler, (void*) vForceRef, &vForceRef->_vForceIOPorts, SENSORLESS, VForceRef_ComputeVForceRef,
+			VForceRef_GetFS);
+}
+
+void VForceRef_Config(ClassVForceRef * vForceRef, uint32_t vForceRefFS, float kStiff, float kDamp) {
+
+	vForceRef->_vForceFS = vForceRefFS;
+
+	PID_Construct(&vForceRef->_vForcePID, &vForceRef->_vForceFS, kStiff, 0, kDamp, 0, 0);
+
+	IOPorts_Construct(&vForceRef->_vForceIOPorts, 1, 1, &vForceRef->_vForcePID._ctlSignal);
+}
+
+void VForceRef_ComputeVForceRef(void * vForceRefV){
+
+	ClassVForceRef * vForceRef = (ClassVForceRef *) vForceRefV;
+
+	PID_setVarRef(&vForceRef->_vForcePID,VForceRef_GetDistance(vForceRef));
+	PID_ComputeCtl(&vForceRef->_vForcePID, 0);
+}
+
+// Parameters Setters
+
+void VForceRef_SetFS(ClassVForceRef * vForceRef, uint32_t vForceRefFS){
+
+	vForceRef->_vForceFS = vForceRefFS;
+}
+
+void VForceRef_SetStiffnes(ClassVForceRef * vForceRef, float kStiff){
+
+	vForceRef->_vForcePID._ctlKP = kStiff;
+}
+
+void VForceRef_SetDamping(ClassVForceRef * vForceRef, float kDamp){
+
+	vForceRef->_vForcePID._ctlKD = kDamp;
+}
+
+// Parameters and variable Getters
+
+// Parameters
+
+uint32_t VForceRef_GetFS(void * vForceRefV){
+
+	ClassVForceRef * vForceRef = (ClassVForceRef *) vForceRefV;
+
+	return vForceRef->_vForceFS;
+}
+
+float VForceRef_GetStiffnes(ClassVForceRef * vForceRef){
+
+	return vForceRef->_vForcePID._ctlKP;
+}
+
+float VForceRef_GetDamping(ClassVForceRef * vForceRef){
+
+	return vForceRef->_vForcePID._ctlKD;
+}
+
+// Variables
+
+float * VForceRef_GetDistance(ClassVForceRef * vForceRef){
+
+	return *IOPorts_GetInPort(&vForceRef->_vForceIOPorts);
+}
+
+float VForceRef_GetVFRefSignal(ClassVForceRef * vForceRef){
+
+	return *IOPorts_GetOutPort(&vForceRef->_vForceIOPorts);
+}
+
+float VForceRef_GetVSpringForce(ClassVForceRef * vForceRef){
+
+	return vForceRef->_vForcePID._ctlSignalP;
+}
+
+float VForceRef_GetVDamperForce(ClassVForceRef * vForceRef){
+
+	return vForceRef->_vForcePID._ctlSignalD;
+}

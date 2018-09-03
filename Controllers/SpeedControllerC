@@ -1,0 +1,112 @@
+#include "SpeedController.h"
+
+void SpeedCtl_Construct(ClassSpeedCtl * speedCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	SpeedCtl_Config(speedCtl, ctlFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	CtlHandler_Construct(&speedCtl->_speedHandler, (void*) speedCtl, &speedCtl->_speedIOPorts, QEI_SPEED, SpeedCtl_ComputeSpeedCtl,
+			SpeedCtl_GetFS);
+}
+
+void SpeedCtl_Config(ClassSpeedCtl * speedCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	speedCtl->_speedFS = ctlFS;
+
+	PID_Construct(&speedCtl->_speedPID, &speedCtl->_speedFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	IOPorts_Construct(&speedCtl->_speedIOPorts, 1, 1, &speedCtl->_speedPID._ctlSignal);
+}
+
+void SpeedCtl_ComputeSpeedCtl(void * speedCtlV){
+
+	ClassSpeedCtl * speedCtl = (ClassSpeedCtl *) speedCtlV;
+
+	PID_setVarRef(&speedCtl->_speedPID,SpeedCtl_GetSpeedRef(speedCtl));
+	PID_ComputeCtl(&speedCtl->_speedPID, QEI_GetSpeedRadSec());
+
+}
+
+// Parameters Setters
+
+void SpeedCtl_SetFS(ClassSpeedCtl * speedCtl, uint32_t ctlFS){
+
+	speedCtl->_speedFS = ctlFS;
+}
+
+void SpeedCtl_SetKP(ClassSpeedCtl * speedCtl, float ctlKP){
+
+	speedCtl->_speedPID._ctlKP = ctlKP;
+}
+
+void SpeedCtl_SetKI(ClassSpeedCtl * speedCtl, float ctlKI){
+
+	speedCtl->_speedPID._ctlKI = ctlKI;
+}
+
+void SpeedCtl_SetSat(ClassSpeedCtl * speedCtl, float ctlSat){
+
+	speedCtl->_speedPID._ctlSignalSat = ctlSat;
+}
+
+void SpeedCtl_SetISat(ClassSpeedCtl * speedCtl, float ctlISat){
+
+	speedCtl->_speedPID._ctlSignalISat = ctlISat;
+}
+
+// Parameters and variable Getters
+
+// Parameters
+
+uint32_t SpeedCtl_GetFS(void * speedCtlV){
+
+	ClassSpeedCtl * speedCtl = (ClassSpeedCtl *) speedCtlV;
+
+	return speedCtl->_speedFS;
+}
+
+float SpeedCtl_GetKP(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlKP;
+}
+
+float SpeedCtl_GetKI(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlKI;
+}
+float SpeedCtl_GetSat(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlSignalSat;
+}
+
+float SpeedCtl_GetISat(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlSignalISat;
+}
+
+// Variables
+
+float SpeedCtl_GetSpeedRef(ClassSpeedCtl * speedCtl){
+
+	return *IOPorts_GetInPort(&speedCtl->_speedIOPorts,0);
+}
+
+float SpeedCtl_GetCtlSignal(ClassSpeedCtl * speedCtl){
+
+	return *IOPorts_GetOutPort(&speedCtl->_speedIOPorts);
+}
+
+float SpeedCtl_GetSpeedError(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlVarError;
+}
+
+float SpeedCtl_GetCtlSignalP(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlSignalP;
+}
+
+float SpeedCtl_GetCtlSignalI(ClassSpeedCtl * speedCtl){
+
+	return speedCtl->_speedPID._ctlSignalI;
+}
+

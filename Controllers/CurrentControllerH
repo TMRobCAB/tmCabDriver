@@ -1,0 +1,67 @@
+#ifndef CURRENT_CTL_H
+
+#define CURRENT_CTL_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "Sensors/CurrentMeas.h"
+#include "Modules/PIDCtl.h"
+#include "utils/ModuleIOPorts.h"
+#include "utils/CtlHandler.h"
+
+//*****************************************************************************
+//
+// Global variables of CurrentController.c
+//
+//*****************************************************************************
+
+typedef struct ClassCurrentCtl ClassCurrentCtl;
+
+struct ClassCurrentCtl{
+
+	uint32_t _currentFS;
+
+	ClassPID _currentPID;
+
+	ClassIOPorts _currentIOPorts;
+
+	ClassCtlHandler _currentHandler;
+};
+
+
+
+//*****************************************************************************
+//
+// Functions defined in CurrentController.c
+//
+//*****************************************************************************
+
+
+//*****************************************************************************
+//
+// Functions defined in CurrentController.c that are made available to other files.
+//
+//*****************************************************************************
+void CurrentCtl_Construct(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+void CurrentCtl_Config(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat);
+
+float CurrentCtl_GetCurrentRef(ClassCurrentCtl * CurrentCtl);
+float CurrentCtl_GetCtlSignal(ClassCurrentCtl * CurrentCtl);
+
+void CurrentCtl_ComputeCurrentCtl(void * CurrentCtlV);
+
+void CurrentCtl_SetFS(ClassCurrentCtl * CurrentCtl, uint32_t ctlFS);
+void CurrentCtl_SetKP(ClassCurrentCtl * CurrentCtl, float ctlKP);
+void CurrentCtl_SetKI(ClassCurrentCtl * CurrentCtl, float ctlKI);
+void CurrentCtl_SetSat(ClassCurrentCtl * CurrentCtl, float ctlSat);
+void CurrentCtl_SetISat(ClassCurrentCtl * CurrentCtl, float ctlISat);
+
+uint32_t CurrentCtl_GetFS(void * CurrentCtlV);
+float CurrentCtl_GetKP(ClassCurrentCtl * CurrentCtl);
+float CurrentCtl_GetKI(ClassCurrentCtl * CurrentCtl);
+float CurrentCtl_GetSat(ClassCurrentCtl * CurrentCtl);
+float CurrentCtl_GetISat(ClassCurrentCtl * CurrentCtl);
+
+#endif

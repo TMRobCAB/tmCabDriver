@@ -1,0 +1,63 @@
+#ifndef VIRTUAL_FORCE_H
+
+#define VIRTUAL_FORCE_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+#include "Modules/PIDCtl.h"
+#include "utils/ModuleIOPorts.h"
+#include "utils/CtlHandler.h"
+
+//*****************************************************************************
+//
+// Global variables of CurrentController.c
+//
+//*****************************************************************************
+
+typedef struct ClassVForceRef ClassVForceRef;
+
+struct ClassVForceRef{
+
+	uint32_t _vForceFS;
+
+	ClassPID _vForcePID;
+
+	ClassIOPorts _vForceIOPorts;
+
+	ClassCtlHandler _vForceHandler;
+};
+
+
+
+//*****************************************************************************
+//
+// Functions defined in CurrentController.c
+//
+//*****************************************************************************
+
+
+//*****************************************************************************
+//
+// Functions defined in CurrentController.c that are made available to other files.
+//
+//*****************************************************************************
+void VForceRef_Construct(ClassVForceRef * vForceRef, uint32_t vForceRefFS, float kStiff, float kDamp);
+void VForceRef_Config(ClassVForceRef * vForceRef, uint32_t vForceRefFS, float kStiff, float kDamp);
+
+void VForceRef_ComputeVForceRef(void * vForceRefV);
+
+void VForceRef_SetFS(ClassVForceRef * vForceRef, uint32_t vForceRefFS);
+uint32_t VForceRef_GetFS(void * vForceRefV);
+
+void VForceRef_SetStiffnes(ClassVForceRef * vForceRef, float kStiff);
+void VForceRef_SetDamping(ClassVForceRef * vForceRef, float kDamp);
+float VForceRef_GetStiffnes(ClassVForceRef * vForceRef);
+float VForceRef_GetDamping(ClassVForceRef * vForceRef);
+
+float * VForceRef_GetDistance(ClassVForceRef * vForceRef);
+float VForceRef_GetVFRefSignal(ClassVForceRef * vForceRef);
+float VForceRef_GetVSpringForce(ClassVForceRef * vForceRef);
+float VForceRef_GetVDamperForce(ClassVForceRef * vForceRef);
+
+#endif

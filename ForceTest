@@ -1,0 +1,144 @@
+/***
+ *    _________     _____ __________  ___________    .__            _____                  _______      _______  ____
+ *    \_   ___ \   /  _  \\______   \ \__    ___/___ |  |   ____   /     \ _____    ____   \   _  \     \   _  \/_   |
+ *    /    \  \/  /  /_\  \|    |  _/   |    |_/ __ \|  | _/ __ \ /  \ /  \\__  \  /    \  /  /_\  \    /  /_\  \|   |
+ *    \     \____/    |    \    |   \   |    |\  ___/|  |_\  ___//    Y    \/ __ \|   |  \ \  \_/   \   \  \_/   \   |
+ *     \______  /\____|__  /______  /   |____| \___  >____/\___  >____|__  (____  /___|  /  \_____  / /\ \_____  /___|
+ *            \/         \/       \/               \/          \/        \/     \/     \/         \/  \/       \/
+ */
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <driverlib/rom.h>
+#include "Sensors/QEIModule.h"
+#include  "Actuators/PWMModule.h"
+#include "utils/ControlScheme.h"
+#include "utils/RGBDriver.h"
+#include "Controllers/ForceController.h"
+#include "utils/MainMenu.h"
+#include "drivers/buttons.h"
+#include "ConfigTiva.h"
+#include "Storage/USBStickModule.h"
+
+int main(void) {
+
+	//
+	// Enable lazy stacking for interrupt handlers.  This allows floating-point
+	// instructions to be used within interrupt handlers, but at the expense of
+	// extra stack usage.
+	//
+	ROM_FPULazyStackingEnable();
+	ROM_FPUEnable();
+
+	// Initialize system Clock
+	TivaCfg_SysClk();
+
+	// Config RGB
+	RGB_Config();
+
+	// Initialize buttons
+	ButtonsInit();
+
+	// Config QEI
+	QEI_Config();
+
+	uint32_t currCtlFS = 100;
+
+	ForceT_Config(currCtlFS);
+
+	ClassPWM pwmModule;
+	PWM_Construct(&pwmModule, 0, 25000, 12, currCtlFS);
+
+	ClassForceCtl forceCtl;
+	ForceCtl_Construct(&forceCtl, currCtlFS, 0, 0, 0, 0, 0);
+
+	ClassCtlScheme ctlScheme;
+	CtlScheme_Construct(&ctlScheme, &pwmModule, currCtlFS);
+
+	CtlScheme_Connect(&ctlScheme, &forceCtl._forceHandler,
+			&pwmModule._pwmHandler);
+
+	ClassUSBStick stickStorage;
+	USBStick_Construct(&stickStorage, currCtlFS, LOGGER);
+	USBStick_Enable(&stickStorage);
+	while (_deviceState != eSTATE_DEVICE_READY) {
+		USBStick_Run(&stickStorage);
+	}
+
+	CtlScheme_AddComModule(&ctlScheme, &stickStorage._USBStickHandler);
+
+//	ClassUART uartLog;
+//	UART_Construct(&uartLog, 1, 115200, SysCtlClockGet(), currCtlFS, LOGGER);
+//
+//	CtlScheme_AddComModule(&ctlScheme, &uartLog._uartHandeler);
+
+	float dcRef = 0; //[A]
+
+	pwmModule._IOPorts._inPortsAdder[0] = &dcRef;
+
+	USBStick_AddVar2Stream(&stickStorage, &ctlScheme._sysTime, "Time");
+	USBStick_AddVar2Stream(&stickStorage, &dcRef, "DCV");
+	USBStick_AddVar2Stream(&stickStorage, &forceCtl._forcePID._ctlVar, "Force");
+
+//	UART_AddVar2LogStream(&uartLog, &forceCtl._forcePID._ctlVar, "Force");
+
+//	UART_Enable(&uartLog);
+
+	uint32_t refIter = 0;
+	uint32_t refIterMax = 600000;
+	float dDCRef = 0.5;
+	float dcScale = 0.90;
+	bool dcPosFlag = true;
+
+	while (1) {
+
+		if (CtlScheme_IsRunning(&ctlScheme) == false) {
+
+			USBStick_Run(&stickStorage);
+		}
+
+		runMenu(&ctlScheme);
+
+		if(CtlScheme_IsRunning(&ctlScheme) == false){
+			dcRef = 0;
+			dcPosFlag = true;
+		}
+		if (dcPosFlag) {
+			if (refIter >= refIterMax && CtlScheme_IsRunning(&ctlScheme)) {
+
+				refIter = 0;
+
+				dcRef += dDCRef;
+
+				if (dcRef > (12 * dcScale)) {
+					dcRef = 0;
+					dcPosFlag = false;
+				}
+			} else {
+
+				refIter++;
+			}
+		}
+
+		if (dcPosFlag == false) {
+			if (refIter >= refIterMax && CtlScheme_IsRunning(&ctlScheme)) {
+
+				refIter = 0;
+
+				dcRef -= dDCRef;
+
+				if (dcRef < -(12 * dcScale)) {
+					dcRef = 0;
+					dcPosFlag = true;
+					CtlScheme_Stop(&ctlScheme);
+				}
+
+			} else {
+
+				refIter++;
+			}
+		}
+
+	}
+
+}

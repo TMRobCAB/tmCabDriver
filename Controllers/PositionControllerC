@@ -1,0 +1,109 @@
+#include <Controllers/PositionController>
+
+void PosCtl_Construct(ClassPosCtl * posCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	PosCtl_Config(posCtl, ctlFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	CtlHandler_Construct(&posCtl->_posHandler, (void*) posCtl, &posCtl->_posIOPorts, QEI_POS, PosCtl_ComputePosCtl,
+			PosCtl_GetFS);
+}
+
+void PosCtl_Config(ClassPosCtl * posCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	posCtl->_posFS = ctlFS;
+
+	PID_Construct(&posCtl->_posPID, &posCtl->_posFS, ctlKP, ctlKI, ctlKD, ctlSat, ctlSat);
+
+	IOPorts_Construct(&posCtl->_posIOPorts, 1, 1, &posCtl->_posPID._ctlSignal);
+}
+
+void PosCtl_ComputePosCtl(void * posCtlV){
+
+	ClassPosCtl * posCtl = (ClassPosCtl *) posCtlV;
+
+	PID_setVarRef(&posCtl->_posPID,PosCtl_GetPosRef(posCtl));
+	PID_ComputeCtl(&posCtl->_posPID, QEI_GetPosRad());
+}
+
+// Parameters Setters
+
+void PosCtl_SetFS(ClassPosCtl * posCtl, uint32_t ctlFS){
+
+	posCtl->_posFS = ctlFS;
+}
+
+void PosCtl_SetKP(ClassPosCtl * posCtl, float ctlKP){
+
+	posCtl->_posPID._ctlKP = ctlKP;
+}
+
+void PosCtl_SetKI(ClassPosCtl * posCtl, float ctlKI){
+
+	posCtl->_posPID._ctlKI = ctlKI;
+}
+
+void PosCtl_SetSat(ClassPosCtl * posCtl, float ctlSat){
+
+	posCtl->_posPID._ctlSignalSat = ctlSat;
+}
+
+void PosCtl_SetISat(ClassPosCtl * posCtl, float ctlISat){
+
+	posCtl->_posPID._ctlSignalISat = ctlISat;
+}
+
+// Parameters and variable Getters
+
+// Parameters
+uint32_t PosCtl_GetFS(void * posCtlV){
+
+	ClassPosCtl * posCtl = (ClassPosCtl *) posCtlV;
+
+	return posCtl->_posFS;
+}
+
+float PosCtl_GetKP(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlKP;
+}
+
+float PosCtl_GetKI(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlKI;
+}
+float PosCtl_GetSat(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlSignalSat;
+}
+
+float PosCtl_GetISat(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlSignalISat;
+}
+
+// Variables
+
+float PosCtl_GetPosRef(ClassPosCtl * posCtl){
+
+	return *IOPorts_GetInPort(&posCtl->_posIOPorts);
+}
+
+float PosCtl_GetCtlSignal(ClassPosCtl * posCtl){
+
+	return *IOPorts_GetOutPort(&posCtl->_posIOPorts);
+}
+
+float PosCtl_GetPosError(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlVarError;
+}
+
+float PosCtl_GetCtlSignalP(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlSignalP;
+}
+
+float PosCtl_GetCtlSignalI(ClassPosCtl * posCtl){
+
+	return posCtl->_posPID._ctlSignalI;
+}

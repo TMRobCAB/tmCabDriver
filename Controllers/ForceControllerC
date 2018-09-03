@@ -1,0 +1,110 @@
+#include "ForceController.h"
+
+void ForceCtl_Construct(ClassForceCtl * ForceCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	ForceCtl_Config(ForceCtl, ctlFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	CtlHandler_Construct(&ForceCtl->_forceHandler, (void*) ForceCtl, &ForceCtl->_forceIOPorts, FORCE, ForceCtl_ComputeForceCtl,
+			ForceCtl_GetFS);
+}
+
+void ForceCtl_Config(ClassForceCtl * ForceCtl, uint32_t ctlFS, float ctlKP, float ctlKI, float ctlKD, float ctlSat, float cltISat) {
+
+	ForceCtl->_forceFS = ctlFS;
+
+	PID_Construct(&ForceCtl->_forcePID, &ForceCtl->_forceFS, ctlKP, ctlKI, ctlKD, ctlSat, cltISat);
+
+	IOPorts_Construct(&ForceCtl->_forceIOPorts, 1, 1, &ForceCtl->_forcePID._ctlSignal);
+}
+
+void ForceCtl_ComputeForceCtl(void * ForceCtlV){
+
+	ClassForceCtl * ForceCtl = (ClassForceCtl *) ForceCtlV;
+
+	PID_setVarRef(&ForceCtl->_forcePID,ForceCtl_GetForceRef(ForceCtl));
+	PID_ComputeCtl(&ForceCtl->_forcePID, ForceT_GetForce());
+}
+
+// Parameters Setters
+
+void ForceCtl_SetFS(ClassForceCtl * ForceCtl, uint32_t ctlFS){
+
+	ForceCtl->_forceFS = ctlFS;
+}
+
+void ForceCtl_SetKP(ClassForceCtl * ForceCtl, float ctlKP){
+
+	ForceCtl->_forcePID._ctlKP = ctlKP;
+}
+
+void ForceCtl_SetKI(ClassForceCtl * ForceCtl, float ctlKI){
+
+	ForceCtl->_forcePID._ctlKI = ctlKI;
+}
+
+void ForceCtl_SetSat(ClassForceCtl * ForceCtl, float ctlSat){
+
+	ForceCtl->_forcePID._ctlSignalSat = ctlSat;
+}
+
+void ForceCtl_SetISat(ClassForceCtl * ForceCtl, float ctlISat){
+
+	ForceCtl->_forcePID._ctlSignalISat = ctlISat;
+}
+
+// Parameters and variable Getters
+
+// Parameters
+
+uint32_t ForceCtl_GetFS(void * ForceCtlV){
+
+	ClassForceCtl * ForceCtl = (ClassForceCtl *) ForceCtlV;
+
+	return ForceCtl->_forceFS;
+}
+
+float ForceCtl_GetKP(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlKP;
+}
+
+float ForceCtl_GetKI(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlKI;
+}
+float ForceCtl_GetSat(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlSignalSat;
+}
+
+float ForceCtl_GetISat(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlSignalISat;
+}
+
+// Variables
+
+float ForceCtl_GetForceRef(ClassForceCtl * ForceCtl){
+
+	return *IOPorts_GetInPort(&ForceCtl->_forceIOPorts);
+}
+
+float ForceCtl_GetCtlSignal(ClassForceCtl * ForceCtl){
+
+	return *IOPorts_GetOutPort(&ForceCtl->_forceIOPorts);
+}
+
+float ForceCtl_GetForceError(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlVarError;
+}
+
+float ForceCtl_GetCtlSignalP(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlSignalP;
+}
+
+float ForceCtl_GetCtlSignalI(ClassForceCtl * ForceCtl){
+
+	return ForceCtl->_forcePID._ctlSignalI;
+}
